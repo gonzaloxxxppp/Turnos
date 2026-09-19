@@ -1,4 +1,4 @@
-import { DaySchedule, TimeSlot, ScheduleConfig } from '@/types/appointments';
+import { DaySchedule, TimeSlot, ScheduleConfig, AllowedInterval } from '@/types/appointments';
 
 export const FULL_START_HOUR = 8;
 export const FULL_END_HOUR = 21;
@@ -7,6 +7,8 @@ export const END_HOUR = FULL_END_HOUR;
 export const ACTIVE_START_HOUR = 14;
 export const ACTIVE_END_HOUR = 20;
 export const INTERVAL_MINUTES = 15;
+
+export const VALID_INTERVAL_MINUTES: readonly AllowedInterval[] = [15, 20, 25, 30, 45] as const;
 
 export const DEFAULT_SCHEDULE_CONFIG: ScheduleConfig = {
   startHour: '14:00',
@@ -116,7 +118,13 @@ export function ensureSlotsForRange(
     const endTime = formatMinutesToTime(current + intervalMinutes);
 
     if (existingMap.has(startTime)) {
-      merged.push(existingMap.get(startTime)!);
+      const existing = existingMap.get(startTime)!;
+      merged.push({
+        ...existing,
+        id: startTime,
+        startTime,
+        endTime, // Actualiza el endTime al nuevo intervalo seleccionado
+      });
     } else {
       merged.push({
         id: startTime,
@@ -125,6 +133,7 @@ export function ensureSlotsForRange(
         status: isSunday ? 'deshabilitado' : 'disponible',
         description: isSunday ? 'Domingo no laborable' : '',
         clientName: '',
+        clientPhone: '',
         category: 'General',
       });
     }
@@ -134,16 +143,16 @@ export function ensureSlotsForRange(
 }
 
 /**
- * Backwards-compatible day slots generation (full range 08:00 to 21:00)
+ * Day slots generation with customizable interval
  */
-export function generateDaySlots(isSunday: boolean = false): TimeSlot[] {
+export function generateDaySlots(isSunday: boolean = false, intervalMinutes: number = 15): TimeSlot[] {
   const slots: TimeSlot[] = [];
   const startMinutes = FULL_START_HOUR * 60;
   const endMinutes = FULL_END_HOUR * 60;
 
-  for (let current = startMinutes; current < endMinutes; current += INTERVAL_MINUTES) {
+  for (let current = startMinutes; current < endMinutes; current += intervalMinutes) {
     const startTime = formatMinutesToTime(current);
-    const endTime = formatMinutesToTime(current + INTERVAL_MINUTES);
+    const endTime = formatMinutesToTime(current + intervalMinutes);
 
     if (isSunday) {
       slots.push({
@@ -153,6 +162,7 @@ export function generateDaySlots(isSunday: boolean = false): TimeSlot[] {
         status: 'deshabilitado',
         description: 'Domingo no laborable',
         clientName: '',
+        clientPhone: '',
         category: 'General',
       });
     } else {
@@ -166,6 +176,7 @@ export function generateDaySlots(isSunday: boolean = false): TimeSlot[] {
         status: isOutsideActiveHours ? 'deshabilitado' : 'disponible',
         description: isOutsideActiveHours ? 'Fuera de horario de atención' : '',
         clientName: '',
+        clientPhone: '',
         category: 'General',
       });
     }
@@ -228,52 +239,20 @@ export function getWeekDates(referenceDate: Date = new Date()): { date: Date; da
 }
 
 /**
- * Generates an initial schedule with default slots and sample appointments
+ * Generates an initial clean schedule without any mock or sample appointments
  */
 export function generateInitialSchedule(config: ScheduleConfig = DEFAULT_SCHEDULE_CONFIG): Record<string, DaySchedule> {
   const week = getWeekDates(new Date());
   const schedule: Record<string, DaySchedule> = {};
 
   week.forEach((item) => {
-    // Generate full range so user can switch between ranges without losing slots
-    const slots = generateDaySlots(item.isSunday);
-
-    // Sample appointments
-    if (item.dayName === 'Lunes') {
-      const slot1400 = slots.find((s) => s.id === '14:00');
-      if (slot1400) {
-        slot1400.status = 'ocupado';
-        slot1400.clientName = 'Mariana López';
-        slot1400.description = 'Reunión de coordinación y expedientes';
-        slot1400.category = 'Consulta y Sesión';
-      }
-
-      const slot1430 = slots.find((s) => s.id === '14:30');
-      if (slot1430) {
-        slot1430.status = 'ocupado';
-        slot1430.clientName = 'Carlos Giménez';
-        slot1430.description = 'Consulta de control y entrega de documentación';
-        slot1430.category = 'General';
-      }
-
-      const slot1715 = slots.find((s) => s.id === '17:15');
-      if (slot1715) {
-        slot1715.status = 'ocupado';
-        slot1715.clientName = 'Sofía Valenzuela';
-        slot1715.description = 'Firma de acuerdo de servicio';
-        slot1715.category = 'Maquillaje y Estética';
-      }
-    }
-
-    if (item.dayName === 'Martes') {
-      const slot1500 = slots.find((s) => s.id === '15:00');
-      if (slot1500) {
-        slot1500.status = 'ocupado';
-        slot1500.clientName = 'Estudio Contable';
-        slot1500.description = 'Balance mensual y auditoría';
-        slot1500.category = 'General';
-      }
-    }
+    // Generate slots based on user-defined range and interval, fully clean
+    const slots = generateSlotsForRange(
+      config.startHour,
+      config.endHour,
+      item.isSunday,
+      config.intervalMinutes
+    );
 
     schedule[item.dateKey] = {
       dateKey: item.dateKey,

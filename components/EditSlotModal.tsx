@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { TimeSlot, SlotStatus, CategoryItem } from '@/types/appointments';
 import { getCategoryStyle } from '@/lib/categories';
-import { X, Check, Trash2, Ban, Clock, Calendar, User, FileText, Settings } from 'lucide-react';
+import { parseTimeToMinutes } from '@/lib/time-utils';
+import { X, Check, Trash2, Ban, Clock, Calendar, User, FileText, Settings, Phone } from 'lucide-react';
 
 interface EditSlotModalProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ export const EditSlotModal: React.FC<EditSlotModalProps> = ({
 }) => {
   const [status, setStatus] = useState<SlotStatus>('disponible');
   const [clientName, setClientName] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<string>('General');
 
@@ -37,12 +39,15 @@ export const EditSlotModal: React.FC<EditSlotModalProps> = ({
     if (slot) {
       setStatus(slot.status);
       setClientName(slot.clientName || '');
+      setClientPhone(slot.clientPhone || '');
       setDescription(slot.description || '');
       setCategory(slot.category || (categories[0]?.name ?? 'General'));
     }
   }, [slot, categories]);
 
   if (!isOpen || !slot) return null;
+
+  const slotDuration = Math.max(1, parseTimeToMinutes(slot.endTime) - parseTimeToMinutes(slot.startTime)) || 15;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,6 +62,7 @@ export const EditSlotModal: React.FC<EditSlotModalProps> = ({
       ...slot,
       status: finalStatus,
       clientName: clientName.trim(),
+      clientPhone: clientPhone.trim(),
       description: description.trim(),
       category,
       updatedAt: new Date().toISOString(),
@@ -87,7 +93,7 @@ export const EditSlotModal: React.FC<EditSlotModalProps> = ({
               <Clock className="w-5 h-5 text-rose-700 dark:text-rose-400" />
               <span>Horario: {slot.startTime} - {slot.endTime}</span>
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-900 dark:text-rose-200 font-medium">
-                15 min
+                {slotDuration} min
               </span>
             </div>
           </div>
@@ -100,20 +106,20 @@ export const EditSlotModal: React.FC<EditSlotModalProps> = ({
           </button>
         </div>
 
-        {/* Form Content */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto scrollbar-thin">
+        {/* Content Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto">
           {/* Status Selection */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-rose-900/80 dark:text-rose-300 mb-2">
               Estado del Turno
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-2.5">
               <button
                 type="button"
                 onClick={() => setStatus('disponible')}
                 className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-xs font-semibold transition-all ${
                   status === 'disponible'
-                    ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 ring-2 ring-emerald-500/30 shadow-sm'
+                    ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/30 shadow-sm'
                     : 'border-zinc-200 dark:border-zinc-800 hover:bg-rose-50/40 text-zinc-600 dark:text-zinc-400'
                 }`}
               >
@@ -149,6 +155,37 @@ export const EditSlotModal: React.FC<EditSlotModalProps> = ({
             </div>
           </div>
 
+          {/* Client / Person */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-rose-900/80 dark:text-rose-300 mb-2">
+                <User className="w-3.5 h-3.5 text-rose-700" />
+                Cliente / Paciente
+              </label>
+              <input
+                type="text"
+                value={clientName}
+                onChange={(e) => setClientName(e.target.value)}
+                placeholder="Ej. Sofía Gómez"
+                className="w-full rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-white dark:bg-zinc-800/80 px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:border-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500/20 transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-rose-900/80 dark:text-rose-300 mb-2">
+                <Phone className="w-3.5 h-3.5 text-rose-700" />
+                Teléfono / WhatsApp
+              </label>
+              <input
+                type="text"
+                value={clientPhone}
+                onChange={(e) => setClientPhone(e.target.value)}
+                placeholder="+54 9 11 1234-5678"
+                className="w-full rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-white dark:bg-zinc-800/80 px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:border-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500/20 transition-all"
+              />
+            </div>
+          </div>
+
           {/* Description */}
           <div>
             <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-rose-900/80 dark:text-rose-300 mb-2">
@@ -162,76 +199,63 @@ export const EditSlotModal: React.FC<EditSlotModalProps> = ({
               placeholder="Escribe una pequeña descripción para recordar para qué era este turno..."
               className="w-full rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-white dark:bg-zinc-800/80 px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:border-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500/20 transition-all resize-none"
             />
-            <p className="text-[11px] text-rose-800/70 dark:text-rose-400/70 mt-1">
-              Esta nota se mostrará en la tabla para recordar los detalles del turno.
-            </p>
           </div>
 
-          {/* Client / Person */}
-          <div>
-            <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-rose-900/80 dark:text-rose-300 mb-2">
-              <User className="w-3.5 h-3.5 text-rose-700" />
-              Cliente / Persona / Título (Opcional)
-            </label>
-            <input
-              type="text"
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              placeholder="Ej. Sofía, Valentina, Dra. Laura..."
-              className="w-full rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-white dark:bg-zinc-800/80 px-3.5 py-2 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:border-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500/20 transition-all"
-            />
-          </div>
-
-          {/* Categories with Quick Manage Link (No emojis) */}
+          {/* Dynamic Categories Selector */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-rose-900/80 dark:text-rose-300">
-                Categoría
+              <label className="block text-xs font-bold uppercase tracking-wider text-rose-900/80 dark:text-rose-300">
+                Categoría del Turno
               </label>
               <button
                 type="button"
                 onClick={onOpenManageCategories}
-                className="text-xs text-rose-700 dark:text-rose-400 hover:text-rose-900 dark:hover:text-rose-300 font-semibold flex items-center gap-1 hover:underline"
+                className="text-xs text-rose-700 hover:text-rose-900 dark:text-rose-400 font-semibold flex items-center gap-1 hover:underline"
               >
                 <Settings className="w-3 h-3" />
-                Administrar categorías
+                <span>Gestionar Categorías</span>
               </button>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {categories.map((cat) => {
-                const isSelected = category === cat.name;
                 const style = getCategoryStyle(cat.color);
+                const isSelected = category === cat.name;
 
                 return (
                   <button
-                    type="button"
                     key={cat.id}
+                    type="button"
                     onClick={() => setCategory(cat.name)}
-                    className={`px-3 py-1 rounded-xl text-xs font-semibold border transition-all ${
+                    className={`flex items-center gap-2 p-2.5 rounded-2xl border text-xs font-medium transition-all text-left ${
                       isSelected
-                        ? `${style.badgeClass} ring-2 ring-rose-700/50 shadow-xs scale-105 font-bold`
-                        : 'border-rose-200 dark:border-rose-900/40 bg-rose-50/40 dark:bg-zinc-800/40 text-zinc-700 dark:text-zinc-400 hover:bg-rose-100/60'
+                        ? 'border-rose-600 bg-rose-50 dark:bg-rose-950/60 text-rose-950 dark:text-rose-100 ring-2 ring-rose-500/30 font-bold shadow-2xs'
+                        : 'border-rose-100 dark:border-rose-950/80 hover:bg-rose-50/50 text-zinc-700 dark:text-zinc-300'
                     }`}
                   >
-                    <span>{cat.name}</span>
+                    <span className={`w-2.5 h-2.5 rounded-full ${style.dotClass}`} />
+                    <span className="truncate">{cat.name}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Actions */}
+          {/* Footer Actions */}
           <div className="flex items-center justify-between pt-4 border-t border-rose-100 dark:border-rose-950">
-            <button
-              type="button"
-              onClick={handleClear}
-              className="flex items-center gap-1.5 text-xs font-medium text-rose-700 dark:text-rose-400 hover:text-rose-900 p-2 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
-              title="Restablecer este horario a Disponible y vaciar descripción"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Limpiar turno</span>
-            </button>
+            <div>
+              {(slot.clientName || slot.description || slot.status === 'ocupado') && (
+                <button
+                  type="button"
+                  onClick={handleClear}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-700 hover:text-rose-900 hover:bg-rose-100 dark:hover:bg-rose-950/40 rounded-xl transition-colors"
+                  title="Vaciar y dejar disponible"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Restablecer Turno</span>
+                </button>
+              )}
+            </div>
 
             <div className="flex items-center gap-2">
               <button
@@ -241,6 +265,7 @@ export const EditSlotModal: React.FC<EditSlotModalProps> = ({
               >
                 Cancelar
               </button>
+
               <button
                 type="submit"
                 className="flex items-center gap-1.5 px-5 py-2 text-xs font-semibold text-white bg-rose-700 hover:bg-rose-800 active:scale-98 rounded-xl shadow-md shadow-rose-900/25 transition-all"

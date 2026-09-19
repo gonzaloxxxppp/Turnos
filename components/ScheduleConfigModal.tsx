@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ScheduleConfig } from '@/types/appointments';
-import { formatMinutesToTime, parseTimeToMinutes } from '@/lib/time-utils';
-import { X, Check, Clock, SlidersHorizontal, AlertCircle } from 'lucide-react';
+import { ScheduleConfig, AllowedInterval } from '@/types/appointments';
+import { formatMinutesToTime, parseTimeToMinutes, VALID_INTERVAL_MINUTES } from '@/lib/time-utils';
+import { X, Check, Clock, AlertCircle, Timer } from 'lucide-react';
 
 interface ScheduleConfigModalProps {
   isOpen: boolean;
@@ -20,11 +20,13 @@ export const ScheduleConfigModal: React.FC<ScheduleConfigModalProps> = ({
 }) => {
   const [startHour, setStartHour] = useState(currentConfig.startHour);
   const [endHour, setEndHour] = useState(currentConfig.endHour);
+  const [intervalMinutes, setIntervalMinutes] = useState<AllowedInterval>(currentConfig.intervalMinutes || 15);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setStartHour(currentConfig.startHour);
     setEndHour(currentConfig.endHour);
+    setIntervalMinutes(currentConfig.intervalMinutes || 15);
     setError(null);
   }, [currentConfig, isOpen]);
 
@@ -38,7 +40,6 @@ export const ScheduleConfigModal: React.FC<ScheduleConfigModalProps> = ({
 
   const endOptions: string[] = [];
   for (let m = 7 * 60; m <= 24 * 60; m += 30) {
-    // 24:00 can be represented as 23:59 or 23:45
     if (m === 24 * 60) {
       endOptions.push('23:45');
     } else {
@@ -49,7 +50,7 @@ export const ScheduleConfigModal: React.FC<ScheduleConfigModalProps> = ({
   const startMin = parseTimeToMinutes(startHour);
   const endMin = parseTimeToMinutes(endHour);
   const totalMinutes = endMin - startMin;
-  const totalSlots = totalMinutes > 0 ? Math.floor(totalMinutes / 15) : 0;
+  const totalSlots = totalMinutes > 0 ? Math.floor(totalMinutes / intervalMinutes) : 0;
 
   const handleApplyPreset = (start: string, end: string) => {
     setStartHour(start);
@@ -65,9 +66,10 @@ export const ScheduleConfigModal: React.FC<ScheduleConfigModalProps> = ({
     }
 
     onSaveConfig({
+      ...currentConfig,
       startHour,
       endHour,
-      intervalMinutes: 15,
+      intervalMinutes,
     });
     onClose();
   };
@@ -89,7 +91,7 @@ export const ScheduleConfigModal: React.FC<ScheduleConfigModalProps> = ({
                 Definir Horario de Atención
               </h3>
               <p className="text-xs text-rose-800 dark:text-rose-300 font-medium">
-                Configura la hora de inicio y final de la agenda
+                Configura horas de inicio/fin y la duración de los turnos
               </p>
             </div>
           </div>
@@ -105,7 +107,7 @@ export const ScheduleConfigModal: React.FC<ScheduleConfigModalProps> = ({
           {/* Quick Presets */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-rose-900/80 dark:text-rose-300 mb-2">
-              Atajos Rápidos
+              Atajos Rápidos de Horario
             </label>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <button
@@ -200,13 +202,46 @@ export const ScheduleConfigModal: React.FC<ScheduleConfigModalProps> = ({
             </div>
           </div>
 
+          {/* Slot Duration / Interval Selector (15, 20, 25, 30, 45 min) */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-rose-900/80 dark:text-rose-300">
+                <Timer className="w-3.5 h-3.5 text-rose-700" />
+                Duración de Cada Turno
+              </label>
+              <span className="text-xs font-bold text-rose-800 dark:text-rose-300 bg-rose-100 dark:bg-rose-950 px-2 py-0.5 rounded-full border border-rose-300 dark:border-rose-800">
+                {intervalMinutes} minutos
+              </span>
+            </div>
+            <div className="grid grid-cols-5 gap-2">
+              {VALID_INTERVAL_MINUTES.map((mins) => {
+                const isSelected = intervalMinutes === mins;
+                return (
+                  <button
+                    key={mins}
+                    type="button"
+                    onClick={() => setIntervalMinutes(mins)}
+                    className={`py-2.5 px-2 rounded-2xl text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 border ${
+                      isSelected
+                        ? 'bg-rose-700 text-white border-rose-700 shadow-md shadow-rose-900/25 scale-[1.02]'
+                        : 'border-rose-200 dark:border-rose-900/60 bg-rose-50/40 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-rose-100/60'
+                    }`}
+                  >
+                    <span>{mins}</span>
+                    <span className="text-[10px] font-normal opacity-90">min</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Calculation summary info */}
           <div className="p-3.5 rounded-2xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 flex items-center justify-between text-xs">
             <span className="text-zinc-600 dark:text-zinc-300">
               Rango: <strong>{startHour}</strong> a <strong>{endHour}</strong>
             </span>
             <span className="text-rose-900 dark:text-rose-200 font-bold">
-              {totalSlots} turnos de 15 min por día
+              {totalSlots} turnos de {intervalMinutes} min por día
             </span>
           </div>
 

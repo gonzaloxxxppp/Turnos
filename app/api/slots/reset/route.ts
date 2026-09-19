@@ -13,7 +13,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { dateKey, slotId } = body;
+    const { dateKey, slotId, accountId = 'default' } = body;
 
     if (!dateKey) {
       return NextResponse.json(
@@ -26,17 +26,37 @@ export async function POST(request: Request) {
 
     if (slotId) {
       // Restablecer un turno individual a 'disponible'
-      const { data, error } = await supabase
+      const matchCriteria: Record<string, string> = { date_key: dateKey, slot_id: slotId };
+      if (accountId) matchCriteria.account_id = accountId;
+
+      let { data, error } = await supabase
         .from('slots')
         .update({
           status: 'disponible',
           client_name: '',
+          client_phone: '',
           description: '',
           updated_at: updatedAt,
         })
-        .match({ date_key: dateKey, slot_id: slotId })
+        .match(matchCriteria)
         .select()
-        .single();
+        .maybeSingle();
+
+      if (error && error.message.includes('account_id')) {
+        const fallback = await supabase
+          .from('slots')
+          .update({
+            status: 'disponible',
+            client_name: '',
+            description: '',
+            updated_at: updatedAt,
+          })
+          .match({ date_key: dateKey, slot_id: slotId })
+          .select()
+          .maybeSingle();
+        data = fallback.data;
+        error = fallback.error;
+      }
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
@@ -45,15 +65,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, data });
     } else {
       // Restablecer todos los turnos de ese día
-      const { error } = await supabase
+      let query = supabase
         .from('slots')
         .update({
           status: 'disponible',
           client_name: '',
+          client_phone: '',
           description: '',
           updated_at: updatedAt,
         })
         .eq('date_key', dateKey);
+
+      if (accountId) {
+        query = query.eq('account_id', accountId);
+      }
+
+      let { error } = await query;
+
+      if (error && error.message.includes('account_id')) {
+        const fallback = await supabase
+          .from('slots')
+          .update({
+            status: 'disponible',
+            client_name: '',
+            description: '',
+            updated_at: updatedAt,
+          })
+          .eq('date_key', dateKey);
+        error = fallback.error;
+      }
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });

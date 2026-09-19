@@ -3,8 +3,10 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { DEFAULT_SCHEDULE_CONFIG } from '@/lib/time-utils';
 import { ScheduleConfig } from '@/types/appointments';
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = createServerSupabaseClient();
+  const { searchParams } = new URL(request.url);
+  const accountId = searchParams.get('accountId') || 'default';
 
   if (!supabase) {
     return NextResponse.json({
@@ -18,7 +20,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from('schedule_config')
       .select('start_hour, end_hour, interval_minutes')
-      .eq('id', 'default')
+      .eq('id', accountId)
       .maybeSingle();
 
     if (error) {
@@ -39,7 +41,8 @@ export async function GET() {
     const config: ScheduleConfig = {
       startHour: data.start_hour,
       endHour: data.end_hour,
-      intervalMinutes: data.interval_minutes,
+      intervalMinutes: [15, 20, 25, 30, 45].includes(data.interval_minutes) ? data.interval_minutes : 15,
+      accountId,
     };
 
     return NextResponse.json({ configured: true, data: config });
@@ -64,7 +67,7 @@ export async function PUT(request: Request) {
 
   try {
     const body = await request.json();
-    const { startHour, endHour, intervalMinutes = 15 } = body;
+    const { startHour, endHour, intervalMinutes = 15, accountId = 'default' } = body;
 
     if (!startHour || !endHour) {
       return NextResponse.json(
@@ -73,13 +76,15 @@ export async function PUT(request: Request) {
       );
     }
 
+    const validInterval = [15, 20, 25, 30, 45].includes(intervalMinutes) ? intervalMinutes : 15;
+
     const { data, error } = await supabase
       .from('schedule_config')
       .upsert({
-        id: 'default',
+        id: accountId,
         start_hour: startHour,
         end_hour: endHour,
-        interval_minutes: intervalMinutes,
+        interval_minutes: validInterval,
         updated_at: new Date().toISOString(),
       })
       .select()
@@ -95,6 +100,7 @@ export async function PUT(request: Request) {
         startHour: data.start_hour,
         endHour: data.end_hour,
         intervalMinutes: data.interval_minutes,
+        accountId: data.id,
       },
     });
   } catch (err: unknown) {

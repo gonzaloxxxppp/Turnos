@@ -18,37 +18,39 @@ import {
 /**
  * Servicio de datos que interactúa con las rutas de API de Supabase (/api/*)
  * con fallback transparente a localStorage si la base de datos no está disponible.
+ * Soporta multi-tenancy / aislamiento por accountId.
  */
 export const turnosService = {
   /**
-   * Obtiene la configuración de horarios (inicio, fin, intervalo)
+   * Obtiene la configuración de horarios de una cuenta (inicio, fin, intervalo)
    */
-  async getConfig(): Promise<{ config: ScheduleConfig; isCloud: boolean }> {
+  async getConfig(accountId: string = 'default'): Promise<{ config: ScheduleConfig; isCloud: boolean }> {
     try {
-      const res = await fetch('/api/schedule-config', { cache: 'no-store' });
+      const res = await fetch(`/api/schedule-config?accountId=${encodeURIComponent(accountId)}`, { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (json.configured && json.data) {
-          saveScheduleConfig(json.data);
+          saveScheduleConfig(json.data, accountId);
           return { config: json.data, isCloud: true };
         }
       }
     } catch {
       // Fallback a localStorage
     }
-    return { config: loadScheduleConfig(), isCloud: false };
+    return { config: loadScheduleConfig(accountId), isCloud: false };
   },
 
   /**
-   * Guarda la configuración de horarios
+   * Guarda la configuración de horarios para una cuenta
    */
-  async saveConfig(config: ScheduleConfig): Promise<boolean> {
-    saveScheduleConfig(config);
+  async saveConfig(config: ScheduleConfig, accountId: string = 'default'): Promise<boolean> {
+    const configWithAccount = { ...config, accountId };
+    saveScheduleConfig(configWithAccount, accountId);
     try {
       const res = await fetch('/api/schedule-config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
+        body: JSON.stringify({ ...configWithAccount, accountId }),
       });
       return res.ok;
     } catch {
@@ -59,9 +61,9 @@ export const turnosService = {
   /**
    * Obtiene la lista de categorías
    */
-  async getCategories(): Promise<{ categories: CategoryItem[]; isCloud: boolean }> {
+  async getCategories(accountId: string = 'default'): Promise<{ categories: CategoryItem[]; isCloud: boolean }> {
     try {
-      const res = await fetch('/api/categories', { cache: 'no-store' });
+      const res = await fetch(`/api/categories?accountId=${encodeURIComponent(accountId)}`, { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (json.configured && json.data && json.data.length > 0) {
@@ -78,9 +80,9 @@ export const turnosService = {
   /**
    * Crea una nueva categoría
    */
-  async createCategory(cat: Omit<CategoryItem, 'id'> & { id?: string }): Promise<CategoryItem> {
+  async createCategory(cat: Omit<CategoryItem, 'id'> & { id?: string }, accountId: string = 'default'): Promise<CategoryItem> {
     const localId = cat.id || `cat-${Date.now()}`;
-    const newCat: CategoryItem = { ...cat, id: localId };
+    const newCat: CategoryItem = { ...cat, id: localId, accountId };
 
     try {
       const res = await fetch('/api/categories', {
@@ -129,16 +131,18 @@ export const turnosService = {
   },
 
   /**
-   * Carga los turnos para un rango de fechas (ej: la semana visible)
+   * Carga los turnos para un rango de fechas y una cuenta específica
    */
   async getSlotsForRange(
     startDate: string,
-    endDate: string
+    endDate: string,
+    accountId: string = 'default'
   ): Promise<{ slotsByDate: Record<string, TimeSlot[]>; isCloud: boolean }> {
     try {
-      const res = await fetch(`/api/slots?startDate=${startDate}&endDate=${endDate}`, {
-        cache: 'no-store',
-      });
+      const res = await fetch(
+        `/api/slots?startDate=${startDate}&endDate=${endDate}&accountId=${encodeURIComponent(accountId)}`,
+        { cache: 'no-store' }
+      );
       if (res.ok) {
         const json = await res.json();
         if (json.configured && Array.isArray(json.data) && json.data.length > 0) {
@@ -154,8 +158,8 @@ export const turnosService = {
       // Fallback
     }
 
-    // Fallback a localStorage
-    const localStore = loadSchedule();
+    // Fallback a localStorage por cuenta
+    const localStore = loadSchedule(accountId);
     const result: Record<string, TimeSlot[]> = {};
     Object.keys(localStore).forEach((dk) => {
       if (dk >= startDate && dk <= endDate) {
@@ -166,20 +170,22 @@ export const turnosService = {
   },
 
   /**
-   * Guarda o actualiza un turno individual
+   * Guarda o actualiza un turno individual para una cuenta
    */
-  async saveSlot(dateKey: string, slot: TimeSlot): Promise<boolean> {
+  async saveSlot(dateKey: string, slot: TimeSlot, accountId: string = 'default'): Promise<boolean> {
     try {
       const res = await fetch('/api/slots', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          accountId: slot.accountId || accountId,
           dateKey,
           slotId: slot.id,
           startTime: slot.startTime,
           endTime: slot.endTime,
           status: slot.status,
           clientName: slot.clientName,
+          clientPhone: slot.clientPhone,
           description: slot.description,
           category: slot.category,
         }),
@@ -188,6 +194,39 @@ export const turnosService = {
     } catch {
       return false;
     }
+  },
+
+  /**
+   * Reserva pública de un turno (realizada por cualquier visitante en la página principal)
+   */
+  async bookPublicSlot(
+    accountId: string,
+    dateKey: string,
+    slot: TimeSlot,
+    booking: { clientName: string; clientPhone?: string; description?: string }
+  ): Promise<TimeSlot> {
+    const updatedSlot: TimeSlot = {
+      ...slot,
+      accountId,
+      status: 'ocupado',
+      clientName: booking.clientName.trim(),
+      clientPhone: booking.clientPhone?.trim() || '',
+      description: booking.description?.trim() || 'Reserva web',
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Actualizar en localStorage
+    const localSchedule = loadSchedule(accountId);
+    if (localSchedule[dateKey]) {
+      const daySlots = localSchedule[dateKey].slots.map((s) => (s.id === slot.id ? updatedSlot : s));
+      localSchedule[dateKey] = { ...localSchedule[dateKey], slots: daySlots };
+      saveSchedule(localSchedule, accountId);
+    }
+
+    // Actualizar en nube
+    await this.saveSlot(dateKey, updatedSlot, accountId);
+
+    return updatedSlot;
   },
 
   /**
@@ -201,15 +240,17 @@ export const turnosService = {
       endTime: string;
       status: 'disponible' | 'ocupado' | 'deshabilitado';
       clientName?: string;
+      clientPhone?: string;
       description?: string;
       category?: string;
-    }>
+    }>,
+    accountId: string = 'default'
   ): Promise<boolean> {
     try {
       const res = await fetch('/api/slots/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slots }),
+        body: JSON.stringify({ slots, accountId }),
       });
       return res.ok;
     } catch {
@@ -218,14 +259,14 @@ export const turnosService = {
   },
 
   /**
-   * Restablece un turno o el día completo
+   * Restablece un turno o el día completo para una cuenta
    */
-  async resetSlot(dateKey: string, slotId?: string): Promise<boolean> {
+  async resetSlot(dateKey: string, slotId?: string, accountId: string = 'default'): Promise<boolean> {
     try {
       const res = await fetch('/api/slots/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dateKey, slotId }),
+        body: JSON.stringify({ dateKey, slotId, accountId }),
       });
       return res.ok;
     } catch {

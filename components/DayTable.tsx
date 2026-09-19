@@ -12,7 +12,8 @@ import {
   Trash2, 
   CheckCircle,
   AlertCircle,
-  Bookmark
+  Bookmark,
+  CalendarCheck
 } from 'lucide-react';
 
 interface DayTableProps {
@@ -25,6 +26,8 @@ interface DayTableProps {
   searchQuery?: string;
   statusFilter?: 'all' | SlotStatus;
   isCompact?: boolean;
+  isAdmin?: boolean;
+  onPublicBookSlot?: (slot: TimeSlot) => void;
 }
 
 export const DayTable: React.FC<DayTableProps> = ({
@@ -37,8 +40,11 @@ export const DayTable: React.FC<DayTableProps> = ({
   searchQuery = '',
   statusFilter = 'all',
   isCompact = false,
+  isAdmin = true,
+  onPublicBookSlot,
 }) => {
   const isSunday = daySchedule.dayName === 'Domingo';
+  const interval = scheduleConfig.intervalMinutes || 15;
 
   // Helper to find category info
   const findCategory = (catName?: string) => {
@@ -96,7 +102,7 @@ export const DayTable: React.FC<DayTableProps> = ({
             )}
           </div>
           <p className="text-xs text-rose-900/70 dark:text-rose-300/80 mt-0.5 font-medium">
-            Horario configurado: {scheduleConfig.startHour} a {scheduleConfig.endHour} (turnos de 15 min)
+            Horario: {scheduleConfig.startHour} a {scheduleConfig.endHour} (turnos de {interval} min)
           </p>
         </div>
 
@@ -104,7 +110,7 @@ export const DayTable: React.FC<DayTableProps> = ({
         <div className="flex items-center gap-2 text-xs font-medium">
           <span 
             className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/60 shadow-2xs"
-            title="Horarios libres para asignar"
+            title="Horarios libres para asignar o reservar"
           >
             <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm" />
             <span className="font-bold">{disponibles}</span> Libres
@@ -112,7 +118,7 @@ export const DayTable: React.FC<DayTableProps> = ({
 
           <span 
             className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-900 dark:text-rose-200 border border-rose-300 dark:border-rose-800 shadow-2xs"
-            title="Horarios con turnos reservados"
+            title="Horarios reservados"
           >
             <Bookmark className="w-3 h-3 text-rose-700 fill-rose-600" />
             <span className="font-bold">{ocupados}</span> Ocupados
@@ -134,7 +140,7 @@ export const DayTable: React.FC<DayTableProps> = ({
           <div className="flex items-center gap-2">
             <Ban className="w-4 h-4 text-rose-600 flex-shrink-0" />
             <span>
-              <strong>Día no laborable:</strong> Todos los horarios de este domingo están deshabilitados por defecto. Si necesitas habilitar un turno puntual, haz clic en &quot;Habilitar&quot; en su fila correspondiente.
+              <strong>Día no laborable:</strong> Todos los horarios de este domingo están deshabilitados por defecto.
             </span>
           </div>
         </div>
@@ -153,11 +159,11 @@ export const DayTable: React.FC<DayTableProps> = ({
                 </div>
               </th>
               <th className="py-3 px-4 w-32">Estado</th>
-              {!isCompact && <th className="py-3 px-4 w-52">Cliente y Categoría</th>}
+              {!isCompact && <th className="py-3 px-4 w-52">{isAdmin ? 'Cliente y Categoría' : 'Categoría'}</th>}
               <th className="py-3 px-4 min-w-[200px]">
                 <div className="flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-rose-700" />
-                  <span>Descripción / Nota</span>
+                  <span>{isAdmin ? 'Descripción / Nota' : 'Detalles'}</span>
                 </div>
               </th>
               <th className="py-3 px-4 w-44 text-right">Acciones</th>
@@ -213,13 +219,13 @@ export const DayTable: React.FC<DayTableProps> = ({
                       {isOcupado && (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-200/80 dark:bg-rose-950 text-rose-950 dark:text-rose-200 border border-rose-300 dark:border-rose-800 font-bold">
                           <span className="w-2 h-2 rounded-full bg-rose-700" />
-                          Ocupado
+                          Reservado
                         </span>
                       )}
                       {isDeshabilitado && (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-400">
                           <Ban className="w-3 h-3 text-rose-600" />
-                          Deshabilitado
+                          No disponible
                         </span>
                       )}
                     </td>
@@ -228,12 +234,25 @@ export const DayTable: React.FC<DayTableProps> = ({
                     {!isCompact && (
                       <td className="py-2.5 px-4">
                         <div className="flex flex-col gap-1">
-                          {slot.clientName ? (
-                            <span className="font-bold text-zinc-900 dark:text-white truncate max-w-[180px]">
-                              {slot.clientName}
-                            </span>
+                          {isAdmin ? (
+                            slot.clientName ? (
+                              <div className="truncate max-w-[180px]">
+                                <span className="font-bold text-zinc-900 dark:text-white block truncate">
+                                  {slot.clientName}
+                                </span>
+                                {slot.clientPhone && (
+                                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block truncate">
+                                    {slot.clientPhone}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-zinc-400 text-xs italic">-</span>
+                            )
                           ) : (
-                            <span className="text-zinc-400 text-xs italic">-</span>
+                            <span className="text-xs text-zinc-500 font-medium">
+                              {isDisponible ? 'Libre' : isOcupado ? 'Reservado' : '-'}
+                            </span>
                           )}
 
                           {slot.category && (
@@ -253,76 +272,101 @@ export const DayTable: React.FC<DayTableProps> = ({
 
                     {/* Description */}
                     <td className="py-2.5 px-4">
-                      {slot.description ? (
-                        <div 
-                          onClick={() => onEditSlot(slot)}
-                          className="cursor-pointer group/desc hover:text-rose-700 dark:hover:text-rose-300 transition-colors"
-                          title="Haz clic para modificar la descripción"
-                        >
-                          <p className="text-zinc-800 dark:text-zinc-200 line-clamp-2 text-xs leading-relaxed font-normal">
-                            {slot.description}
-                          </p>
-                        </div>
-                      ) : isDeshabilitado ? (
-                        <span className="text-xs text-zinc-400 italic">Horario no disponible</span>
+                      {isAdmin ? (
+                        slot.description ? (
+                          <div 
+                            onClick={() => onEditSlot(slot)}
+                            className="cursor-pointer group/desc hover:text-rose-700 dark:hover:text-rose-300 transition-colors"
+                            title="Haz clic para modificar la descripción"
+                          >
+                            <p className="text-zinc-800 dark:text-zinc-200 line-clamp-2 text-xs leading-relaxed font-normal">
+                              {slot.description}
+                            </p>
+                          </div>
+                        ) : isDeshabilitado ? (
+                          <span className="text-xs text-zinc-400 italic">Horario bloqueado</span>
+                        ) : (
+                          <button
+                            onClick={() => onEditSlot(slot)}
+                            className="text-xs text-rose-700 hover:text-rose-900 dark:text-rose-400 dark:hover:text-rose-300 italic flex items-center gap-1 hover:underline font-medium"
+                          >
+                            <Edit3 className="w-3 h-3 text-rose-600" />
+                            + Agregar descripción
+                          </button>
+                        )
                       ) : (
-                        <button
-                          onClick={() => onEditSlot(slot)}
-                          className="text-xs text-rose-700 hover:text-rose-900 dark:text-rose-400 dark:hover:text-rose-300 italic flex items-center gap-1 hover:underline font-medium"
-                        >
-                          <Edit3 className="w-3 h-3 text-rose-600" />
-                          + Agregar descripción
-                        </button>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                          {isDisponible ? 'Disponible para reserva' : isOcupado ? 'Horario reservado' : 'No disponible'}
+                        </p>
                       )}
                     </td>
 
                     {/* Actions Column */}
                     <td className="py-2.5 px-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {/* Toggle Disable / Enable */}
-                        <button
-                          onClick={() => onToggleDisable(slot.id)}
-                          className={`p-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1 ${
-                            isDeshabilitado
-                              ? 'border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
-                              : 'border-rose-200 text-zinc-600 hover:text-rose-700 hover:bg-rose-50 hover:border-rose-300 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-rose-950/40 dark:hover:text-rose-400'
-                          }`}
-                          title={isDeshabilitado ? 'Habilitar horario' : 'Deshabilitar horario'}
-                        >
-                          {isDeshabilitado ? (
-                            <>
-                              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                              <span className="hidden sm:inline">Habilitar</span>
-                            </>
-                          ) : (
-                            <>
-                              <Ban className="w-3.5 h-3.5 text-rose-600" />
-                              <span className="hidden sm:inline">Deshabilitar</span>
-                            </>
-                          )}
-                        </button>
-
-                        {/* Edit Button */}
-                        <button
-                          onClick={() => onEditSlot(slot)}
-                          className="p-1.5 rounded-xl text-xs font-semibold border border-rose-300 dark:border-rose-900/60 text-rose-900 dark:text-rose-200 bg-rose-100/70 dark:bg-rose-950/50 hover:bg-rose-200/80 dark:hover:bg-rose-900/60 transition-all flex items-center gap-1 shadow-2xs"
-                          title="Modificar turno, cliente y descripción"
-                        >
-                          <Edit3 className="w-3.5 h-3.5 text-rose-700 dark:text-rose-300" />
-                          <span className="hidden sm:inline">Modificar</span>
-                        </button>
-
-                        {/* Reset / Clear Button */}
-                        {(slot.description || slot.clientName || isOcupado) && (
+                      {isAdmin ? (
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Toggle Disable / Enable */}
                           <button
-                            onClick={() => onResetSlot(slot.id)}
-                            className="p-1.5 rounded-xl text-zinc-400 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                            title="Limpiar datos de este turno"
+                            onClick={() => onToggleDisable(slot.id)}
+                            className={`p-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1 ${
+                              isDeshabilitado
+                                ? 'border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
+                                : 'border-rose-200 text-zinc-600 hover:text-rose-700 hover:bg-rose-50 hover:border-rose-300 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-rose-950/40 dark:hover:text-rose-400'
+                            }`}
+                            title={isDeshabilitado ? 'Habilitar horario' : 'Deshabilitar horario'}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            {isDeshabilitado ? (
+                              <>
+                                <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                                <span className="hidden sm:inline">Habilitar</span>
+                              </>
+                            ) : (
+                              <>
+                                <Ban className="w-3.5 h-3.5 text-rose-600" />
+                                <span className="hidden sm:inline">Deshabilitar</span>
+                              </>
+                            )}
                           </button>
-                        )}
-                      </div>
+
+                          {/* Edit Button */}
+                          <button
+                            onClick={() => onEditSlot(slot)}
+                            className="p-1.5 rounded-xl text-xs font-semibold border border-rose-300 dark:border-rose-900/60 text-rose-900 dark:text-rose-200 bg-rose-100/70 dark:bg-rose-950/50 hover:bg-rose-200/80 dark:hover:bg-rose-900/60 transition-all flex items-center gap-1 shadow-2xs"
+                            title="Modificar turno, cliente y descripción"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-rose-700 dark:text-rose-300" />
+                            <span className="hidden sm:inline">Modificar</span>
+                          </button>
+
+                          {/* Reset / Clear Button */}
+                          {(slot.description || slot.clientName || isOcupado) && (
+                            <button
+                              onClick={() => onResetSlot(slot.id)}
+                              className="p-1.5 rounded-xl text-zinc-400 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                              title="Limpiar datos de este turno"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        /* Public Mode: Booking action */
+                        <div className="flex items-center justify-end">
+                          {isDisponible ? (
+                            <button
+                              onClick={() => onPublicBookSlot && onPublicBookSlot(slot)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs shadow-xs active:scale-98 transition-all"
+                            >
+                              <CalendarCheck className="w-3.5 h-3.5" />
+                              <span>Reservar Turno</span>
+                            </button>
+                          ) : (
+                            <span className="text-xs text-zinc-400 italic px-2 py-1">
+                              {isOcupado ? 'No disponible' : 'Cerrado'}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -337,7 +381,9 @@ export const DayTable: React.FC<DayTableProps> = ({
         <span>
           Mostrando {totalSlots} turnos ({scheduleConfig.startHour} a {scheduleConfig.endHour})
         </span>
-        <span className="text-[11px] text-rose-700/70 dark:text-rose-400/70 font-medium">15 min por turno</span>
+        <span className="text-[11px] text-rose-700/70 dark:text-rose-400/70 font-medium">
+          {interval} min por turno
+        </span>
       </div>
     </div>
   );

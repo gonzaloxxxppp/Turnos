@@ -8,6 +8,7 @@ interface BulkSlotInput {
   endTime: string;
   status: 'disponible' | 'ocupado' | 'deshabilitado';
   clientName?: string;
+  clientPhone?: string;
   description?: string;
   category?: string;
 }
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { slots }: { slots: BulkSlotInput[] } = body;
+    const { slots, accountId = 'default' }: { slots: BulkSlotInput[]; accountId?: string } = body;
 
     if (!slots || !Array.isArray(slots) || slots.length === 0) {
       return NextResponse.json(
@@ -35,21 +36,40 @@ export async function POST(request: Request) {
 
     const updatedAt = new Date().toISOString();
     const rows = slots.map((s) => ({
-      id: `${s.dateKey}_${s.slotId}`,
+      id: `${accountId}_${s.dateKey}_${s.slotId}`,
+      account_id: accountId,
       date_key: s.dateKey,
       slot_id: s.slotId,
       start_time: s.startTime,
       end_time: s.endTime,
       status: s.status,
       client_name: s.clientName || '',
+      client_phone: s.clientPhone || '',
       description: s.description || '',
       category: s.category || '',
       updated_at: updatedAt,
     }));
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('slots')
-      .upsert(rows, { onConflict: 'date_key,slot_id' });
+      .upsert(rows);
+
+    if (error && (error.message.includes('account_id') || error.message.includes('client_phone'))) {
+      const fallbackRows = slots.map((s) => ({
+        id: `${s.dateKey}_${s.slotId}`,
+        date_key: s.dateKey,
+        slot_id: s.slotId,
+        start_time: s.startTime,
+        end_time: s.endTime,
+        status: s.status,
+        client_name: s.clientName || '',
+        description: s.description || '',
+        category: s.category || '',
+        updated_at: updatedAt,
+      }));
+      const fallbackRes = await supabase.from('slots').upsert(fallbackRows);
+      error = fallbackRes.error;
+    }
 
     if (error) {
       console.error('Error in bulk upsert:', error);
